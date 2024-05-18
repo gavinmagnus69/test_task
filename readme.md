@@ -7,7 +7,7 @@ mkdir build
 
 cmake .. && make
 
-./test absolute_path_to_file
+./test path_to_file
 
 You can find some test in tests folder
 
