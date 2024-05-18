@@ -1,17 +1,13 @@
 #include <cstddef>
 #include <cstdlib>
-#include <exception>
-#include <ios>
+#include <list>
 #include <iostream>
 #include <map>
-#include <queue>
 #include <regex>
-#include <set>
 #include <sstream>
 #include <stdexcept>
 #include <string>
 #include <fstream>
-#include <unordered_map>
 #include <vector>
 
 struct table{
@@ -33,11 +29,13 @@ class Club
         size_t work_time = 0; //in minutes
         size_t hour_cost = 0;
         size_t prev_event_time = 0; //in minutes
+        
         bool day_started = false;
+        bool day_finished = false;
         std::vector<std::string> current_words;
 
         std::map<std::string, size_t> all_clients;
-        std::queue<std::string> waiting_clients;
+        std::list<std::string> waiting_clients;
         std::map<size_t, table> tables;
     private:
         std::string file_path = "";
@@ -49,6 +47,15 @@ class Club
             std::string word;
             for(;iss >> word;){
                 words.push_back(word);
+            }
+            int space_counter = 0;
+            for(auto chr : str){
+                if(chr == ' '){
+                    ++space_counter;
+                }
+            }
+            if(space_counter > words.size() - 1){
+                throw std::runtime_error("to many spaces");
             }
         }
         std::string size_t_to_date(size_t time){
@@ -92,15 +99,16 @@ class Club
             }
 
             return 60 * hours + minutes;
-
         }
 
-        size_t parse_num(const std::string& str){
-            int tmp = std::stoi(str);
-            if(tmp <= 0){
-                throw std::runtime_error("incorrect num");
+    
+
+        size_t get_num(const std::string& str){
+            std::regex pattern(R"(\b[1-9]\d*\b)");
+            if(std::regex_match(str, pattern)){
+                return std::stoi(str);
             }
-            return tmp;
+            throw std::runtime_error("invalid number");
         }
 
         void parse_club_time(const std::string& str){
@@ -158,17 +166,25 @@ class Club
             //checks time if its throws exception
             validate_time(args[0]);
             //wait for exception id
-            int id = std::stoi(args[1]);
+            int id = get_num(args[1]);
             //validates clients name
             std::regex pattern(R"([a-zA-Z0-9_-]+)");
+            std::regex pattern_time(R"(\b([0-9]{2}):([0-9]{2})\b)");
 
+
+            if(!std::regex_match(args[0], pattern_time)){
+                return false;
+            }
             if(!std::regex_match(args[2], pattern)){
                 return false;
             }
 
             //wait for exception table
             if(args.size() == 4){
-                int tab = std::stoi(args[3]);
+                int tab = get_num(args[3]);
+                if(tab > this->table_num){
+                    return false;
+                }
             }
 
             return true;
@@ -192,13 +208,19 @@ class Club
         }
 
         void end_workday(){
-            std::cout << size_t_to_date(this->end_time) << " day ended" << '\n';
+
+            for(const auto& client : this->all_clients){
+                std::cout << size_t_to_date(this->end_time) << ' ' << 11 << ' ' << client.first << '\n';
+            }
+
+            std::cout << size_t_to_date(this->end_time) << '\n';
             this->tables.erase(0);
             for(const auto& table : this->tables){
                 free_table(table.first, this->work_time);
                 std::cout << table.first << ' ' << table.second.pay_hours * this->hour_cost 
                 << ' ' << size_t_to_date(table.second.sum_minutes) << '\n';
             }
+            day_finished = true;
 
         }
 
@@ -230,6 +252,9 @@ class Club
 
 
         void free_table(int id, int time){
+            if(id == 0){
+                return;
+            }
             if(!this->tables[id].occupied){
                 return;
             }
@@ -243,19 +268,23 @@ class Club
         }
 
         bool set_table(const std::vector<std::string>& words){
-            int table_id = std::stoi(words[3]);
+            int table_id = get_num(words[3]);
+            //table_id client wants to
+            
             if(this->tables[table_id].occupied){
                 return false;
             }
             else{
                 
-                free_table(this->all_clients[words[2]], 
+                int clients_id = this->all_clients[words[2]];
+
+                free_table(clients_id, 
                            get_relative_time(parse_time(words[0])));
 
 
-                if(waiting_clients.size() != 0){
+                if(waiting_clients.size() != 0 && clients_id != 0) {
                     std::string first_client = this->waiting_clients.front();
-                    this->waiting_clients.pop(); 
+                    this->waiting_clients.pop_front(); 
                     invoke_id12(words[0], first_client, this->all_clients[words[2]]);
                 }
 
@@ -265,6 +294,34 @@ class Club
                 return true;
             }
         }
+
+        bool add_client(const std::string& client_name){
+            if(this->all_clients.find(client_name) == this->all_clients.end()){
+                this->all_clients[client_name] = 0;
+                return true;
+            }
+            else {
+                return false;
+            }
+        }
+
+        //removes in all_client and waiting clients
+        bool remove_client(const std::string& client_name){
+            if(this->all_clients.find(client_name) == this->all_clients.end()){
+                return false; 
+            }
+            
+            this->all_clients.erase(client_name);
+
+            for(auto it = this->waiting_clients.begin(); it != this->waiting_clients.end(); ++it){
+                if(*it == client_name){
+                    this->waiting_clients.erase(it);
+                    return true;
+                }
+            }
+            return true;
+        }
+
     private:
     //time id name table
         void invoke_error(const std::string& time, const std::string& msg){
@@ -288,10 +345,10 @@ class Club
             }
 
             day_started = true;
-            //all_clients.insert(words[2]);
-            all_clients[words[2]] = 0;
 
-            //waiting_clients.push(words[2]);
+            if(!add_client(words[2])){
+                throw std::runtime_error("error adding client id1");
+            }
 
 
         }
@@ -317,7 +374,10 @@ class Club
         }
 
         void invoke_id11(const std::vector<std::string>& words){
-            this->all_clients.erase(words[2]);
+            if(!remove_client(words[2])){
+                throw std::runtime_error("error removing client");
+            }
+            //this->all_clients.erase(words[2]);
             std::cout << words[0] << ' ' << 11 << ' ' << words[2] << '\n';
         }
 
@@ -331,28 +391,31 @@ class Club
                  throw std::runtime_error("incorrect num of arguments for id3 event");
             }
 
-            if(tables.size() == 0){
+            if(this->tables.size() == this->table_num){
+                for(const auto& table : this->tables){
+                    if(!table.second.occupied){
+                        invoke_error(words[0], "ICanWaitNoLonger!");
+                        return;
+                    }
+                }
+            }
+            else{
                 invoke_error(words[0], "ICanWaitNoLonger!");
                 return;
             }
 
-            for(const auto& table : this->tables){
-                if(!table.second.occupied){
-                    invoke_error(words[0], "ICanWaitNoLonger!");
-                    return;
-                }
-            }
             if(this->waiting_clients.size() > this->table_num){
                 invoke_id11(words);
                 return;
             }
-                waiting_clients.push(words[2]);
+                waiting_clients.push_back(words[2]);
             
         }
         
         void invoke_id12(const std::string& time, const std::string& client, size_t table){
             set_table({time, "4", client, std::to_string(table)});
             this->all_clients[client] = table;
+            std::cout << time << ' ' << 12 << ' ' << client << ' ' << table << '\n';
 
         }
 
@@ -369,11 +432,15 @@ class Club
             size_t freed_table = this->all_clients[words[2]];
             free_table(freed_table, 
                             get_relative_time(parse_time(words[0])));
-            this->all_clients.erase(words[2]);
 
-            if(waiting_clients.size() != 0){
+            //this->all_clients.erase(words[2]);
+            if(!remove_client(words[2])){
+                throw std::runtime_error("error to remove client");
+            }
+
+            if(this->waiting_clients.size() != 0 && freed_table != 0){
                 std::string first_client = this->waiting_clients.front();
-                this->waiting_clients.pop(); 
+                this->waiting_clients.pop_front(); 
                 invoke_id12(words[0], first_client, freed_table);
             }
             
@@ -397,6 +464,9 @@ class Club
             }
 
             if(compare_time(current_words[0])){
+                if(day_finished){
+                    return;
+                }
                 throw std::runtime_error("invalid timeline");
             }
             prev_event_time = parse_time(current_words[0]);
@@ -404,7 +474,7 @@ class Club
 
             print_event();
             
-            size_t id = std::stoi(this->current_words[1]);
+            size_t id = get_num(this->current_words[1]);
             switch (id) {
                 case 1:
                 {
@@ -442,22 +512,31 @@ class Club
         }
 
 
+
     public:
         void start(){
             int str_cnt = 0;
             std::ifstream in(file_path);
+
+            if(!in.is_open()){
+                std::cerr << "file isn't opened\n";
+                return;
+            }
             std::string current_string;
-            for (; std::getline(in, current_string); ) {
+            for (; std::getline(in, current_string);) {
+                if (day_finished) {
+                    return;
+                }
                 try{
                     if(str_cnt == 0){
-                        this->table_num = parse_num(current_string);
+                        this->table_num = get_num(current_string);
                     }
                     else if(str_cnt == 1){
                         parse_club_time(current_string);
                         std::cout << size_t_to_date(this->start_time) << '\n';
                     }
                     else if(str_cnt == 2){
-                        this->hour_cost = parse_num(current_string);
+                        this->hour_cost = get_num(current_string);
                     }
                     else{
                         event_handler(current_string);
@@ -478,7 +557,10 @@ class Club
                 }    
             
             }
-            end_workday();
+            if(!day_finished){
+                end_workday();
+            }
+            in.close();
 
         }
 
@@ -489,11 +571,6 @@ class Club
 
 int main(int argc, char* argv[]){
 
-    
-    
-    
-    
-    
     std::string path;
     if(argc == 2){
         path = argv[1];
