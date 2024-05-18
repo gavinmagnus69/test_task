@@ -1,10 +1,15 @@
 building using CMAKE and MAKE:
 
-clone repository this repository: git clone 
-2: cd test_task 
-3: mkdir build
-4: cmake .. && make
-5: ./test path_to_file
+git clone https://github.com/gavinmagnus69/test_task.git
+cd test_task 
+
+mkdir build
+
+cmake .. && make
+
+./test absolute_path_to_file
+
+You can find some test in tests folder
 
 
 
