@@ -6,6 +6,8 @@ cd test_task
 
 mkdir build
 
+cd build
+
 cmake .. && make
 
 ./test path_to_file
